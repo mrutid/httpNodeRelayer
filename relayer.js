@@ -2,14 +2,15 @@ var http = require('http');
 var sys = require('util');
 var redis = require('redis-client').createClient();
 
-var GLOBAL_ID = 0;
-
 const STATE_COMPLETED = 'completed';
 const STATE_PENDING = 'pending';
 const STATE_ERROR = 'error';
 const STATE_RETRY_FAIL = 'retry_fail';
+
 const STATUS_OK = 200;
 const STATUS_ERROR = 404;
+const STATUS_WEIRD = 500;
+
 const HEAD_RETRIEVE_ID = 'x-retrieve-id';
 const HEAD_RELAYER_HOST = 'x-relayer-host';
 const HEAD_RELAYER_ALTHOST = 'x-relayer-alternatehost';
@@ -17,17 +18,7 @@ const HEAD_RELAYER_RETRY = 'x-relayer-retry';
 const HEAD_RELAYER_METHOD = 'x-relayer-method';
 const HEAD_RELAYER_PORT = 'x-relayer-port';
 
-function get_id(){
-    redis.incr('HR:GLOBAL_ID_SEQ', function(err, idsec){
-        if(err){
-            console.log("Problems getting ID_SEC: 'HR:GLOBAL_ID_SEQ'");
-        }
-        else{
-           return idsec.toString(); //+new Date().getTime();
-        }
-    });
-}
-function relayed_request(options, retry, alternate_url) {
+function relayed_request(id, options, retry, alternate_url) {
     var relayed_req = http.request(options, function(res_rely) {
         //console.log('STATUS: ' + res.statusCode);
         //console.log('HEADERS: ' + JSON.stringify(res.headers));
@@ -71,7 +62,7 @@ function relayed_request(options, retry, alternate_url) {
             }
             console.log('RETRY to' + sys.inspect(options));
             setTimeout(function() {
-                relayed_req = relayed_request(options, false, false);//no more retries
+                relayed_req = relayed_request(id, options, false, false);//no more retries
                 relayed_req.end();
 
                 console.log('RETRY LAUNCH');
@@ -101,7 +92,6 @@ function relayed_request(options, retry, alternate_url) {
 http.createServer(
     function(req, res) {
 //extract header params
-        var id;
         var data;
         var req_header = req.headers;
         var retrieve_id = req_header[HEAD_RETRIEVE_ID] || "";
@@ -109,11 +99,12 @@ http.createServer(
         var retry = req_header[HEAD_RELAYER_RETRY] || false;
         var alternate_url = req_header[HEAD_RELAYER_ALTHOST] || false;
         var relayer_method = req_header[HEAD_RELAYER_METHOD] || "GET";
+        var relayer_port = req_header[HEAD_RELAYER_PORT] || '80';
 
         if (retrieve_id) {
             redis.hgetall('HR:' + retrieve_id, function(err, status) {
                 if (err) {
-                    res_status = 404;
+                    res_status = STATUS_ERROR;
                     data = 'DB can\'t retrieve your data' + sys.inspect(err);
 
                 }
@@ -152,33 +143,56 @@ http.createServer(
             });
         }
         else {
-            id=get_id();
-            var res_status = id;
-            redis.hmset('HR:' + id, 'State', STATE_PENDING, 'RelayedRequest', relayer_host, function(err) {
-                if (err) {
-                    res_status = 500; //something weird happends
-                    console.log('WARN -(go) DB Can not insert:' + sys.inspect(err));
+            if(relayer_host){
+            redis.incr('HR:GLOBAL_ID_SEQ', function(err, idsec){
+                if(err){
+                    console.log("Problems getting ID_SEC (no continue): 'HR:GLOBAL_ID_SEQ'");
+                    //EXCEPT NO-PERSISTENCE
+                }
+                else{
+                    console.log("ID_SEC: 'HR:GLOBAL_ID_SEQ:'"+idsec);
+                    var id=idsec.toString(); //+new Date().getTime();
+                    var res_status = STATUS_OK;
+                    redis.hmset('HR:' + id, 'State', STATE_PENDING, 'RelayedRequest', relayer_host, function(err) {
+                        if (err) {
+                            res_status = STATUS_WEIRD; //something weird happends
+                            console.log('WARN -(go) DB Can not insert:' + sys.inspect(err));
+                        }
+                    });
+
+                    res.writeHead(res_status, {
+                            'Content-Length': id.length,
+                            'Content-Type': 'text/plain'
+                        }
+                    );
+                    res.write(id);
+                    res.end();
+
+                    //redirect request
+
+                    var options = {
+                        host: relayer_host,
+                        port: relayer_port,
+                        method: relayer_method,
+                        path: '/', //unsupported by header
+                        agent: false};
+                    var relayed_req = relayed_request(id, options, retry, alternate_url);
+                    relayed_req.end();
                 }
             });
+            }
+            else{
+                //Maybe good to search for alternate
+                var data="NO HEADER PRESENT:"+HEAD_RELAYER_HOST;
+                res.writeHead(STATUS_ERROR, {
+                            'Content-Length': data.length,
+                            'Content-Type': 'text/plain'
+                        }
+                    );
+                    res.write(data);
+                    res.end();
+            }
 
-            res.writeHead(res_status, {
-                    'Content-Length': id.length,
-                    'Content-Type': 'text/plain'
-                }
-            );
-            res.write(id);
-            res.end();
-
-            //redirect request
-
-            var options = {
-                host: relayer_host,
-                port: HEAD_RELAYER_PORT,
-                method: relayer_method,
-                path: '/', //unsupported by header
-                agent: false};
-            var relayed_req = relayed_request(options, retry, alternate_url);
-            relayed_req.end();
 
         }
     }).listen(8000);
