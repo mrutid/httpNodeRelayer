@@ -23,28 +23,28 @@ var timer = setTimeout;
 
 function do_rely(req, res) {
     "use strict";
-    function do_relayed_request(id, options, retry, alternate_url) {
+    function do_relayed_request(id, options) {
+
 
         function manage_relayed_response(res_rely) {
 
             function store_data(id, res_rely, content) {
-                        var res_rely_status = res_rely.statusCode,
-                            res_rely_state = STATE_COMPLETED;
+                var res_rely_status = res_rely.statusCode;
 
-                        redis.hmset('HR:' + id,
-                            'State', res_rely_state,
-                            'Header', JSON.stringify(res_rely.headers),
-                            'StatusCode', res_rely_status,
-                            'Data', content,
-                            function (err) {
-                                if (err) {
-                                    log("DB error (Can not insert):" + sys.inspect(err));
-                                }
-                                else {
-                                    log("Kept response for:" + id);
-                                }
-                            });
-                    }
+                redis.hmset('HR:' + id,
+                    'State', STATE_COMPLETED,
+                    'Header', JSON.stringify(res_rely.headers),
+                    'StatusCode', res_rely_status,
+                    'Data', content,
+                    function (err) {
+                        if (err) {
+                            log("DB error (Can not insert):" + sys.inspect(err));
+                        }
+                        else {
+                            log("Kept response for:" + id);
+                        }
+                    });
+            }
 
             var chunk = '';
 
@@ -60,32 +60,34 @@ function do_rely(req, res) {
         }
 
         function handle_socket_exception(socketException) {
+            var retry = req.headers[HEAD_RELAYER_RETRY] || false,
+                alternate_url = req.headers[HEAD_RELAYER_ALTHOST] || false;
 
             function retry_timeout_handler() {
 
-                       function retry_manage_fail(socketException) {
-                                  log("WARN: Retry Fail");
-                                  if (socketException) {
-                                      sys.log('RETRY::SocketException:' + sys.inspect(socketException));
-                                  }
-                                  redis.hset('HR:' + id,
-                                      'State', STATE_RETRY_FAIL,
-                                      function (err) {
-                                          if (err) {
-                                              log("DB error (Can not insert-retryfail):" + sys.inspect(err));
-                                          }
-                                          else {
-                                              log("Retry-fail added for:" + id);
-                                          }
-                                      });
-                              }
+                function retry_manage_fail(socketException) {
+                    log("WARN: Retry Fail");
+                    if (socketException) {
+                        sys.log('RETRY::SocketException:' + sys.inspect(socketException));
+                    }
+                    redis.hset('HR:' + id,
+                        'State', STATE_RETRY_FAIL,
+                        function (err) {
+                            if (err) {
+                                log("DB error (Can not insert-retryfail):" + sys.inspect(err));
+                            }
+                            else {
+                                log("Retry-fail added for:" + id);
+                            }
+                        });
+                }
 
-                       var try_relayed_req = do_relayed_request(id, options, false, false); //no more retries
-                       try_relayed_req.end();
+                var try_relayed_req = do_relayed_request(id, options); //no more retries
+                try_relayed_req.end();
 
-                       log('RETRY LAUNCH');
-                       try_relayed_req.on('error', retry_manage_fail);
-                   }
+                log('RETRY LAUNCH');
+                try_relayed_req.on('error', retry_manage_fail);
+            }
 
 
             if (socketException) {
@@ -107,20 +109,15 @@ function do_rely(req, res) {
         return relayed_req;
     }
 
-    var data = '',
-        req_header = req.headers,
-        retrieve_id = req_header[HEAD_RETRIEVE_ID] || "",
-        relayer_host = req_header[HEAD_RELAYER_HOST],
-        retry = req_header[HEAD_RELAYER_RETRY] || false,
-        alternate_url = req_header[HEAD_RELAYER_ALTHOST] || false,
-        relayer_method = req_header[HEAD_RELAYER_METHOD] || "GET",
-        relayer_port = req_header[HEAD_RELAYER_PORT] || '80',
-        res_status = STATUS_WEIRD,
-        res_header,
+    var res_header,
         res_data,
         res_state,
         relayed_req,
-        options;
+        options,
+        data = '',
+        res_status = STATUS_WEIRD,
+        retrieve_id = req.headers[HEAD_RETRIEVE_ID] || '',
+        relayer_host = req.headers[HEAD_RELAYER_HOST];
 
     if (retrieve_id) {
         redis.hgetall('HR:' + retrieve_id, function (err, status) {
@@ -136,16 +133,15 @@ function do_rely(req, res) {
                 res_state = res_state.toString();
                 res_status = status.StatusCode || "";
                 res_status = res_status.toString();
-
                 if (res_state == STATE_PENDING) {
                     res_data = "Not Yet -pending-";
                     res_status = STATUS_ERROR;
-                    res_header = req_header;
+                    res_header = req.headers;
                 }
                 else if (res_state == STATE_ERROR || res_state == STATE_RETRY_FAIL) {
-                    res_data = "ERROR:" + res_state;
+                    res_data = "ERROR: " + res_state;
                     res_status = STATUS_ERROR;
-                    res_header = req_header;
+                    res_header = req.headers;
                 }
                 else if (res_state == STATE_COMPLETED) {
                     log('COMPLETED::' + sys.inspect(res_data));
@@ -157,58 +153,62 @@ function do_rely(req, res) {
             }
         });
     }
-    else {
-        if (relayer_host) {
-            redis.incr('HR:GLOBAL_ID_SEQ', function (err, idsec) {
-                if (err) {
-                    log("Problems getting ID_SEC (no continue): 'HR:GLOBAL_ID_SEQ'");
-                    //EXCEPT NO-PERSISTENCE
-                }
-                else {
-                    log("ID_SEC: 'HR:GLOBAL_ID_SEQ:'" + idsec);
-                    var id = idsec.toString(); //+new Date().getTime();
-                    res_status = STATUS_OK;
-                    redis.hmset('HR:' + id, 'State', STATE_PENDING, 'RelayedRequest', relayer_host, function (err) {
-                        if (err) {
-                            res_status = STATUS_WEIRD; //something weird happends
-                            log('WARN -(go) DB Can not insert:' + sys.inspect(err));
-                        }
-                    });
+    else if (relayer_host) {
+        redis.incr('HR:GLOBAL_ID_SEQ', function (err, idsec) {
 
-                    res.writeHead(res_status, {
-                            'Content-Length':id.length,
-                            'Content-Type':'text/plain'
-                        }
-                    );
-                    res.write(id);
-                    res.end();
+            var relayer_method = req.headers[HEAD_RELAYER_METHOD] || 'GET',
+                relayer_port = req.headers[HEAD_RELAYER_PORT] || '80',
+                id;
 
-                    //redirect request
+            if (err) {
+                log("Problems getting ID_SEC (no continue): 'HR:GLOBAL_ID_SEQ'");
+                //EXCEPT NO-PERSISTENCE
+            }
+            else {
+                log("ID_SEC: 'HR:GLOBAL_ID_SEQ:'" + idsec);
+                id = idsec.toString(); //+new Date().getTime();
+                res_status = STATUS_OK;
+                redis.hmset('HR:' + id, 'State', STATE_PENDING, 'RelayedRequest', relayer_host, function (err) {
+                    if (err) {
+                        res_status = STATUS_WEIRD; //something weird happends
+                        log('WARN -(go) DB Can not insert:' + sys.inspect(err));
+                    }
+                });
 
-                    options = {
-                        host:relayer_host,
-                        port:relayer_port,
-                        method:relayer_method,
-                        path:'/', //unsupported by header
-                        agent:false};
+                res.writeHead(res_status, {
+                        'Content-Length':id.length,
+                        'Content-Type':'text/plain'
+                    }
+                );
+                res.write(id);
+                res.end();
 
-                    relayed_req = do_relayed_request(id, options, retry, alternate_url);
-                    relayed_req.end();
-                }
-            });
-        }
-        else {
-            //Maybe good to search for alternate
-            data = "NO HEADER PRESENT:" + HEAD_RELAYER_HOST;
-            res.writeHead(STATUS_ERROR, {
-                    'Content-Length':data.length,
-                    'Content-Type':'text/plain'
-                }
-            );
-            res.write(data);
-            res.end();
-        }
+                //redirect request
+
+                options = {
+                    host:relayer_host,
+                    port:relayer_port,
+                    method:relayer_method,
+                    path:'/', //unsupported by header
+                    agent:false};
+
+                relayed_req = do_relayed_request(id, options);
+                relayed_req.end();
+            }
+        });
     }
+    else {
+        //Maybe good to search for alternate
+        data = "NO HEADER PRESENT:" + HEAD_RELAYER_HOST;
+        res.writeHead(STATUS_ERROR, {
+                'Content-Length':data.length,
+                'Content-Type':'text/plain'
+            }
+        );
+        res.write(data);
+        res.end();
+    }
+
 }
 
 http.createServer(
