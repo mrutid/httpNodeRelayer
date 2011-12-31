@@ -199,7 +199,7 @@ function do_rely(req, res) {
 
                 res.writeHead(res_status, {
                         'Content-Length':id.length,
-                        'Content-Type':'text/plain'
+                        'Content-Type'  :'text/plain'
                     }
                 );
                 res.write(id);
@@ -208,11 +208,11 @@ function do_rely(req, res) {
                 //redirect request
 
                 options = {
-                    host:relayer_host,
-                    port:relayer_port,
+                    host  :relayer_host,
+                    port  :relayer_port,
                     method:relayer_method,
-                    path:'/', //unsupported by header
-                    agent:false};
+                    path  :'/', //unsupported by header
+                    agent :false};
 
                 relayed_req = do_relayed_request(id, options);
                 relayed_req.end();
@@ -224,7 +224,7 @@ function do_rely(req, res) {
         data = "NO HEADER PRESENT:" + HEAD_RELAYER_HOST;
         res.writeHead(STATUS_ERROR, {
                 'Content-Length':data.length,
-                'Content-Type':'text/plain'
+                'Content-Type'  :'text/plain'
             }
         );
         res.write(data);
