@@ -23,6 +23,9 @@ var MyGlobal = {'STATE_COMPLETED':'completed',
     'HEAD_RELAYER_RETRY':'x-relayer-retry',
     'HEAD_RELAYER_METHOD':'x-relayer-method',
     'HEAD_RELAYER_PORT':'x-relayer-port',
+    'HEAD_RELAYER_HTTPCALLBACK': 'x-relayer-httpcallback',
+    'HEAD_RELAYER_HTTPCALLBACK_METHOD':'x-relayer-httpcallback_method',
+    'HEAD_RELAYER_HTTPCALLBACK_PORT':'x-relayer-httpcallback_port',
     'log':console.log,
     'timer':setTimeout,
     inspection_str:''};
@@ -48,6 +51,41 @@ function do_rely(req, res) {
                         }
                     });
             }
+            function send_callback(res_data){
+                var callback_host = req.headers[MyGlobal.HEAD_RELAYER_HTTPCALLBACK] || false,
+                    callback_port = req.headers[MyGlobal.HEAD_RELAYER_HTTPCALLBACK_PORT] || '80',
+                    callback_method = 'POST',
+                    callback_req,
+                    callbackoptions;
+                if (callback_host){
+                    callbackoptions = {
+                                        host:callback_host,
+                                        port:callback_port,
+                                        defaultPort: callback_port,
+                                        method:callback_method,
+                                        path:'/',
+                                        agent:false
+                                        //headers:res_rely.headers
+                    };
+                    //delete callbackoptions.headers['Content-Length'];
+                    //callbackoptions.headers['Transfer-encoding']='chunked';
+                    callback_req = http.request(callbackoptions, function(callback_res){
+                        //Check 200 on callback
+                         MyGlobal.log('STATUS: ' + callback_res.statusCode);
+                         MyGlobal.log('HEADERS: ' + JSON.stringify(callback_res.headers));
+                        //console.log("CALLBACK RESPONSE"+sys.inspect(callback_res));
+                     });
+
+                    callback_req.on('error', function(err){
+                        MyGlobal.log("EXCEPTION AT CALLBACK REQUEST:"+sys.inspect(err));
+                    });
+
+                    if (callbackoptions.method=='POST' && res_data){
+                        callback_req.write(res_data, 'utf8');
+                    }
+                    callback_req.end();
+                }
+            }
 
             var chunk = '';
             res_rely.on("data", function (data) {
@@ -55,9 +93,11 @@ function do_rely(req, res) {
                 }
             );
             res_rely.on('end', function (data) {
-                chunk += data;
+                chunk += data?data:'';
                 //keep in redis
                 store_data(id, res_rely, chunk);
+                //send CALLBACK
+                send_callback(chunk);
             });
         }
 
@@ -164,7 +204,8 @@ function do_rely(req, res) {
             var relayer_method = req.headers[MyGlobal.HEAD_RELAYER_METHOD] || 'GET',
                 relayer_port = req.headers[MyGlobal.HEAD_RELAYER_PORT] || '80',
                 id,
-                err_str = '';
+                err_str = '',
+                postdata;
             if (err) {
                 MyGlobal.log("Problems getting ID_SEC (no continue): 'HR:GLOBAL_ID_SEQ'");
                 //EXCEPT NO-PERSISTENCE
@@ -173,11 +214,12 @@ function do_rely(req, res) {
                 MyGlobal.log("ID_SEC: 'HR:GLOBAL_ID_SEQ:'" + idsec);
                 id = idsec.toString(); //+new Date().getTime();
                 res_status = MyGlobal.STATUS_OK;
+                postdata = req.postdata?req.postdata:'';
                 redis.hmset('HR:' + id,
                     MyGlobal.RD_STATE, MyGlobal.STATE_PENDING,
                     MyGlobal.RD_RELAYED_REQUEST, relayer_host,
                     MyGlobal.RD_METHOD, req.method,
-                    MyGlobal.RD_POSTDATA, req.postdata,
+                    MyGlobal.RD_POSTDATA, postdata,
                     function (err) {
                         if (err) {
                             err_str = sys.inspect(err);
@@ -200,7 +242,8 @@ function do_rely(req, res) {
                     method:relayer_method,
                     path:'/',
                     agent:false,
-                    'Content-Length':req.postdata.length};
+                    header:{'Content-Length':postdata.length}
+                    };
 
                 relayed_req = do_relayed_request(id, options);
                 relayed_req.end();
@@ -222,6 +265,7 @@ function do_rely(req, res) {
 http.createServer(
     function (req, res) {
         "use strict";
+        req.setEncoding('utf8');
         if (req.method == 'POST') {
             var chunk = "";
             req.on('data', function (data) {
