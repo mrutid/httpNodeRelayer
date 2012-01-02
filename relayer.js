@@ -14,6 +14,8 @@ var MyGlobal = {'STATE_COMPLETED':'completed',
     'RD_HEADER':'Header',
     'RD_STATUSCODE':'StatusCode',
     'RD_DATA':'Data',
+    'RD_METHOD': 'Method',
+    'RD_POSTDATA': 'Postdata',
     'RD_RELAYED_REQUEST':'RelayedRequest',
     'HEAD_RETRIEVE_ID':'x-retrieve-id',
     'HEAD_RELAYER_HOST':'x-relayer-host',
@@ -117,8 +119,8 @@ function do_rely(req, res) {
         res_data,
         res_state,
         relayed_req,
-        options,
         data = '',
+        options,
         res_status = MyGlobal.STATUS_WEIRD,
         retrieve_id = req.headers[MyGlobal.HEAD_RETRIEVE_ID] || '',
         relayer_host = req.headers[MyGlobal.HEAD_RELAYER_HOST];
@@ -174,6 +176,8 @@ function do_rely(req, res) {
                 redis.hmset('HR:' + id,
                     MyGlobal.RD_STATE, MyGlobal.STATE_PENDING,
                     MyGlobal.RD_RELAYED_REQUEST, relayer_host,
+                    MyGlobal.RD_METHOD, req.method,
+                    MyGlobal.RD_POSTDATA, req.postdata,
                     function (err) {
                         if (err) {
                             err_str = sys.inspect(err);
@@ -192,6 +196,7 @@ function do_rely(req, res) {
                 options = {
                     host:relayer_host,
                     port:relayer_port,
+                    defaultPort: relayer_port,
                     method:relayer_method,
                     path:'/',
                     agent:false,
