@@ -107,6 +107,9 @@ function do_rely(req, res) {
 
         var relayed_req = http.request(options, manage_relayed_response);
         relayed_req.on('error', handle_socket_exception);
+        if (req.method=='POST') {
+            relayed_req.write(req.postdata);
+        }
         return relayed_req;
     }
 
@@ -190,8 +193,10 @@ function do_rely(req, res) {
                     host:relayer_host,
                     port:relayer_port,
                     method:relayer_method,
-                    path:'/', //unsupported by header
-                    agent:false};
+                    path:'/',
+                    agent:false,
+                    'Content-Length':req.postdata.length};
+
                 relayed_req = do_relayed_request(id, options);
                 relayed_req.end();
             }
@@ -218,8 +223,8 @@ http.createServer(
                 chunk += data;
             });
             req.on('end', function (data) {
-                chunk += data;
-                req.postdata = data; //extending req-object
+                chunk += data?data:'';
+                req.postdata = chunk; //extending req-object
                 do_rely(req, res);
             });
         }
