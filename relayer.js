@@ -2,29 +2,28 @@ var http = require('http');
 var sys = require('util');
 var redis_module = require('redis-client');
 var redis = redis_module.createClient(redis_module.DEFAULT_PORT, redis_module.DEFAULT_HOST);
-
-var MyGlobal = {'STATE_COMPLETED' : 'completed',
-    'STATE_PENDING' : 'pending',
-    'STATE_ERROR' : 'error',
-    'STATE_RETRY_FAIL' : 'retry_fail',
-    'STATUS_OK'  : '200',
-    'STATUS_ERROR' : '404',
-    'STATUS_WEIRD' : '500',
-    'RD_STATE' : 'State',
-    'RD_HEADER' : 'Header',
-    'RD_STATUSCODE' : 'StatusCode',
-    'RD_DATA' : 'Data',
-    'RD_RELAYED_REQUEST' : 'RelayedRequest',
-    'HEAD_RETRIEVE_ID' : 'x-retrieve-id',
-    'HEAD_RELAYER_HOST' : 'x-relayer-host',
-    'HEAD_RELAYER_ALTHOST' : 'x-relayer-alternatehost',
-    'HEAD_RELAYER_RETRY' : 'x-relayer-retry',
-    'HEAD_RELAYER_METHOD' : 'x-relayer-method',
-    'HEAD_RELAYER_PORT' : 'x-relayer-port',
-    'log' : console.log,
-    'timer' : setTimeout,
-     inspection_str:''};
-
+//CommonJs modules make this unnecessary
+var MyGlobal = {'STATE_COMPLETED':'completed',
+    'STATE_PENDING':'pending',
+    'STATE_ERROR':'error',
+    'STATE_RETRY_FAIL':'retry_fail',
+    'STATUS_OK':'200',
+    'STATUS_ERROR':'404',
+    'STATUS_WEIRD':'500',
+    'RD_STATE':'State',
+    'RD_HEADER':'Header',
+    'RD_STATUSCODE':'StatusCode',
+    'RD_DATA':'Data',
+    'RD_RELAYED_REQUEST':'RelayedRequest',
+    'HEAD_RETRIEVE_ID':'x-retrieve-id',
+    'HEAD_RELAYER_HOST':'x-relayer-host',
+    'HEAD_RELAYER_ALTHOST':'x-relayer-alternatehost',
+    'HEAD_RELAYER_RETRY':'x-relayer-retry',
+    'HEAD_RELAYER_METHOD':'x-relayer-method',
+    'HEAD_RELAYER_PORT':'x-relayer-port',
+    'log':console.log,
+    'timer':setTimeout,
+    inspection_str:''};
 function do_rely(req, res) {
     "use strict";
     function do_relayed_request(id, options) {
@@ -49,7 +48,6 @@ function do_rely(req, res) {
             }
 
             var chunk = '';
-
             res_rely.on("data", function (data) {
                     chunk += data;
                 }
@@ -65,6 +63,7 @@ function do_rely(req, res) {
             var retry = req.headers[MyGlobal.HEAD_RELAYER_RETRY] || false,
                 alternate_url = req.headers[MyGlobal.HEAD_RELAYER_ALTHOST] || false,
                 try_relayed_req;
+
             function retry_timeout_handler() {
                 function retry_manage_fail(socketException) {
                     MyGlobal.log("WARN: Retry Fail");
@@ -87,19 +86,15 @@ function do_rely(req, res) {
 
                 try_relayed_req = do_relayed_request(id, options); //no more retries
                 try_relayed_req.end();
-
                 MyGlobal.log('RETRY LAUNCH');
                 try_relayed_req.on('error', retry_manage_fail);
             }
-
 
             if (socketException) {
                 MyGlobal.inspection_str = sys.inspect(socketException);
                 sys.log('SocketException:' + MyGlobal.inspection_str);
             }
-
             if (retry) {
-
                 if (alternate_url) {
                     options.host = alternate_url;
                     //options.agent=false;
@@ -124,7 +119,6 @@ function do_rely(req, res) {
         res_status = MyGlobal.STATUS_WEIRD,
         retrieve_id = req.headers[MyGlobal.HEAD_RETRIEVE_ID] || '',
         relayer_host = req.headers[MyGlobal.HEAD_RELAYER_HOST];
-
     if (retrieve_id) {
         redis.hgetall('HR:' + retrieve_id, function (err, redis_data) {
             if (err) {
@@ -133,16 +127,12 @@ function do_rely(req, res) {
             }
             else {
                 res_header = redis_data[MyGlobal.RD_HEADER] || "";
-
                 res_data = redis_data[MyGlobal.RD_DATA] || "";
                 res_data = res_data.toString();
-
                 res_state = redis_data[MyGlobal.RD_STATE] || "";
                 res_state = res_state.toString();
-
                 res_status = redis_data[MyGlobal.RD_STATUSCODE] || "";
                 res_status = res_status.toString();
-
                 if (res_state == MyGlobal.STATE_PENDING) {
                     res_data = "Not Yet -pending-";
                     res_status = MyGlobal.STATUS_ERROR;
@@ -166,12 +156,10 @@ function do_rely(req, res) {
     }
     else if (relayer_host) {
         redis.incr('HR:GLOBAL_ID_SEQ', function (err, idsec) {
-
             var relayer_method = req.headers[MyGlobal.HEAD_RELAYER_METHOD] || 'GET',
                 relayer_port = req.headers[MyGlobal.HEAD_RELAYER_PORT] || '80',
                 id,
                 err_str = '';
-
             if (err) {
                 MyGlobal.log("Problems getting ID_SEC (no continue): 'HR:GLOBAL_ID_SEQ'");
                 //EXCEPT NO-PERSISTENCE
@@ -180,7 +168,6 @@ function do_rely(req, res) {
                 MyGlobal.log("ID_SEC: 'HR:GLOBAL_ID_SEQ:'" + idsec);
                 id = idsec.toString(); //+new Date().getTime();
                 res_status = MyGlobal.STATUS_OK;
-
                 redis.hmset('HR:' + id,
                     MyGlobal.RD_STATE, MyGlobal.STATE_PENDING,
                     MyGlobal.RD_RELAYED_REQUEST, relayer_host,
@@ -191,24 +178,20 @@ function do_rely(req, res) {
                             MyGlobal.log('WARN -(go) DB Can not insert:' + err_str);
                         }
                     });
-
                 res.writeHead(res_status, {
                         'Content-Length':id.length,
-                        'Content-Type'  :'text/plain'
+                        'Content-Type':'text/plain'
                     }
                 );
                 res.write(id);
                 res.end();
-
                 //redirect request
-
                 options = {
-                    host  :relayer_host,
-                    port  :relayer_port,
+                    host:relayer_host,
+                    port:relayer_port,
                     method:relayer_method,
-                    path  :'/', //unsupported by header
-                    agent :false};
-
+                    path:'/', //unsupported by header
+                    agent:false};
                 relayed_req = do_relayed_request(id, options);
                 relayed_req.end();
             }
@@ -219,13 +202,12 @@ function do_rely(req, res) {
         data = "NO HEADER PRESENT:" + MyGlobal.HEAD_RELAYER_HOST;
         res.writeHead(MyGlobal.STATUS_ERROR, {
                 'Content-Length':data.length,
-                'Content-Type'  :'text/plain'
+                'Content-Type':'text/plain'
             }
         );
         res.write(data);
         res.end();
     }
-
 }
 http.createServer(
     function (req, res) {
@@ -244,5 +226,4 @@ http.createServer(
         else {
             do_rely(req, res);
         }
-
     }).listen(8000);
