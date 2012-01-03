@@ -14,8 +14,8 @@ var MyGlobal = {'STATE_COMPLETED':'completed',
     'RD_HEADER':'Header',
     'RD_STATUSCODE':'StatusCode',
     'RD_DATA':'Data',
-    'RD_METHOD': 'Method',
-    'RD_POSTDATA': 'Postdata',
+    'RD_METHOD':'Method',
+    'RD_POSTDATA':'Postdata',
     'RD_RELAYED_REQUEST':'RelayedRequest',
     'HEAD_RETRIEVE_ID':'x-retrieve-id',
     'HEAD_RELAYER_HOST':'x-relayer-host',
@@ -23,7 +23,7 @@ var MyGlobal = {'STATE_COMPLETED':'completed',
     'HEAD_RELAYER_RETRY':'x-relayer-retry',
     'HEAD_RELAYER_METHOD':'x-relayer-method',
     'HEAD_RELAYER_PORT':'x-relayer-port',
-    'HEAD_RELAYER_HTTPCALLBACK': 'x-relayer-httpcallback',
+    'HEAD_RELAYER_HTTPCALLBACK':'x-relayer-httpcallback',
     'HEAD_RELAYER_HTTPCALLBACK_METHOD':'x-relayer-httpcallback_method',
     'HEAD_RELAYER_HTTPCALLBACK_PORT':'x-relayer-httpcallback_port',
     'log':console.log,
@@ -51,35 +51,33 @@ function do_rely(req, res) {
                         }
                     });
             }
-            function send_callback(res_data){
+
+            function send_callback(res_data) {
                 var callback_host = req.headers[MyGlobal.HEAD_RELAYER_HTTPCALLBACK] || false,
                     callback_port = req.headers[MyGlobal.HEAD_RELAYER_HTTPCALLBACK_PORT] || '80',
                     callback_method = 'POST',
                     callback_req,
                     callbackoptions;
-                if (callback_host){
+                if (callback_host) {
                     callbackoptions = {
-                                        host:callback_host,
-                                        port:callback_port,
-                                        defaultPort: callback_port,
-                                        method:callback_method,
-                                        path:'/',
-                                        agent:false,
-                                        headers:res_rely.headers
+                        host:callback_host,
+                        port:callback_port,
+                        defaultPort:callback_port,
+                        method:callback_method,
+                        path:'/',
+                        headers:res_rely.headers
                     };
-
-                    callback_req = http.request(callbackoptions, function(callback_res){
+                    callback_req = http.request(callbackoptions, function (callback_res) {
                         //Check 200 on callback
-                         MyGlobal.log('STATUS: ' + callback_res.statusCode);
+                        MyGlobal.log('STATUS: ' + callback_res.statusCode);
                         //MyGlobal.log('HEADERS: ' + JSON.stringify(callback_res.headers));
-                       //MyGlobal.log('RELAYED HEADER!!:'+ JSON.stringify(res_rely.headers));
-                     });
-
-                    callback_req.on('error', function(err){
-                        MyGlobal.log("EXCEPTION AT CALLBACK REQUEST:"+sys.inspect(err));
+                        //MyGlobal.log('RELAYED HEADER!!:'+ JSON.stringify(res_rely.headers));
                     });
-
-                    if (res_data){
+                    callback_req.on('error', function (err) {
+                        MyGlobal.inspection_str=sys.inspect(err);
+                        MyGlobal.log("EXCEPTION AT CALLBACK REQUEST:" + MyGlobal.inspection_str);
+                    });
+                    if (res_data) {
                         callback_req.write(res_data);
                     }
                     callback_req.end();
@@ -92,15 +90,13 @@ function do_rely(req, res) {
                 }
             );
             res_rely.on('end', function (data) {
-                chunk += data?data:'';
+                chunk += data ? data : '';
                 //keep in redis
-                //store_data(id, res_rely, chunk);
+                store_data(id, res_rely, chunk);
                 //send CALLBACK
                 send_callback(chunk);
-                MyGlobal.log('CHUNK:'+chunk);
+                MyGlobal.log('CHUNK:' + chunk);
             });
-
-
         }
 
         function handle_socket_exception(socketException) {
@@ -136,12 +132,11 @@ function do_rely(req, res) {
 
             if (socketException) {
                 MyGlobal.inspection_str = sys.inspect(socketException);
-                sys.log('SocketException:' + MyGlobal.inspection_str);
+                sys.log('HANDLE_SOCKT:: SocketException:' + MyGlobal.inspection_str);
             }
             if (retry) {
                 if (alternate_url) {
                     options.host = alternate_url;
-                    //options.agent=false;
                 }
                 MyGlobal.inspection_str = sys.inspect(options);
                 MyGlobal.log('RETRY to' + MyGlobal.inspection_str);
@@ -151,7 +146,7 @@ function do_rely(req, res) {
 
         var relayed_req = http.request(options, manage_relayed_response);
         relayed_req.on('error', handle_socket_exception);
-        if (req.method=='POST') {
+        if (req.method == 'POST') {
             relayed_req.write(req.postdata);
         }
         return relayed_req;
@@ -166,16 +161,17 @@ function do_rely(req, res) {
         res_status = MyGlobal.STATUS_WEIRD,
         retrieve_id = req.headers[MyGlobal.HEAD_RETRIEVE_ID] || '',
         relayer_host = req.headers[MyGlobal.HEAD_RELAYER_HOST];
-
     if (retrieve_id) {
         redis.hgetall('HR:' + retrieve_id, function (err, redis_data) {
             if (err) {
                 res_status = MyGlobal.STATUS_ERROR;
-                data = 'DB can\'t retrieve your data' + sys.inspect(err);
+                MyGlobal.inspection_str=sys.inspect(err);
+                data = 'DB can\'t retrieve your data' + MyGlobal.inspection_str;
             }
             else {
                 res_header = redis_data[MyGlobal.RD_HEADER] || "";
-                res_header = JSON.parse(res_header.toString());
+                res_header = res_header.toString();
+                res_header = JSON.parse(res_header);
                 res_data = redis_data[MyGlobal.RD_DATA] || "";
                 res_data = res_data.toString();
                 res_state = redis_data[MyGlobal.RD_STATE] || "";
@@ -205,55 +201,60 @@ function do_rely(req, res) {
         });
     }
     else if (relayer_host) {
-        redis.incr('HR:GLOBAL_ID_SEQ', function (err, idsec) {
-            var relayer_method = req.headers[MyGlobal.HEAD_RELAYER_METHOD] || 'GET',
-                relayer_port = req.headers[MyGlobal.HEAD_RELAYER_PORT] || '80',
-                id,
-                err_str = '',
-                postdata;
-            if (err) {
-                MyGlobal.log("Problems getting ID_SEC (no continue): 'HR:GLOBAL_ID_SEQ'");
-                //EXCEPT NO-PERSISTENCE
-            }
-            else {
-                MyGlobal.log("ID_SEC: 'HR:GLOBAL_ID_SEQ:'" + idsec);
-                id = idsec.toString(); //+new Date().getTime();
-                res_status = MyGlobal.STATUS_OK;
-                postdata = req.postdata?req.postdata:'';
-                redis.hmset('HR:' + id,
-                    MyGlobal.RD_STATE, MyGlobal.STATE_PENDING,
-                    MyGlobal.RD_RELAYED_REQUEST, relayer_host,
-                    MyGlobal.RD_METHOD, req.method,
-                    MyGlobal.RD_POSTDATA, postdata,
-                    function (err) {
-                        if (err) {
-                            err_str = sys.inspect(err);
-                            res_status = MyGlobal.STATUS_WEIRD; //something weird happens
-                            MyGlobal.log('WARN -(go) DB Can not insert:' + err_str);
+        try {
+            redis.incr('HR:GLOBAL_ID_SEQ', function (err, idsec) {
+                var relayer_method = req.headers[MyGlobal.HEAD_RELAYER_METHOD] || 'GET',
+                    relayer_port = req.headers[MyGlobal.HEAD_RELAYER_PORT] || '80',
+                    id,
+                    err_str = '',
+                    postdata;
+                if (err) {
+                    MyGlobal.log("Problems getting ID_SEC (no continue): 'HR:GLOBAL_ID_SEQ'");
+                    //EXCEPT NO-PERSISTENCE
+                }
+                else {
+                    MyGlobal.log("ID_SEC: 'HR:GLOBAL_ID_SEQ:'" + idsec);
+                    id = idsec.toString(); //+new Date().getTime();
+                    res_status = MyGlobal.STATUS_OK;
+                    postdata = req.postdata ? req.postdata : '';
+                    redis.hmset('HR:' + id,
+                        MyGlobal.RD_STATE, MyGlobal.STATE_PENDING,
+                        MyGlobal.RD_RELAYED_REQUEST, relayer_host,
+                        MyGlobal.RD_METHOD, req.method,
+                        MyGlobal.RD_POSTDATA, postdata,
+                        function (err) {
+                            if (err) {
+                                err_str = sys.inspect(err);
+                                res_status = MyGlobal.STATUS_WEIRD; //something weird happens
+                                MyGlobal.log('WARN -(go) DB Can not insert:' + err_str);
+                            }
+                        });
+                    res.writeHead(res_status, {
+                            //'Content-Length':id.length,
+                            'Content-Type':'text/plain'
                         }
-                    });
-                res.writeHead(res_status, {
-                        //'Content-Length':id.length,
-                        'Content-Type':'text/plain'
-                    }
-                );
-                res.write(id);
-                res.end();
-                //redirect request
-                options = {
-                    host:relayer_host,
-                    port:relayer_port,
-                    defaultPort: relayer_port,
-                    method:relayer_method,
-                    path:'/',
-                    agent:false
-                    //header:{'Content-Length':postdata.length}
+                    );
+                    //res.write(id);
+                    res.write("Rely OK");
+                    res.end();
+                    //redirect request
+                    options = {
+                        host:relayer_host,
+                        port:relayer_port,
+                        defaultPort:relayer_port,
+                        method:relayer_method,
+                        path:'/'
+                        //header:{'Content-Length':postdata.length}
                     };
-
-                relayed_req = do_relayed_request(id, options);
-                relayed_req.end();
-            }
-        });
+                    relayed_req = do_relayed_request(id, options);
+                    relayed_req.end();
+                }
+            });
+        }
+        catch (excp) {
+            MyGlobal.inspection_str=sys.inspect(excp);
+            sys.log("REDIS CATCH::" + MyGlobal.inspection_str);
+        }
     }
     else {
         //Maybe good to search for alternate
@@ -270,6 +271,7 @@ function do_rely(req, res) {
 http.createServer(
     function (req, res) {
         "use strict";
+        http.globalAgent.maxSockets = 100;
         req.setEncoding('utf8');
         if (req.method == 'POST') {
             var chunk = "";
@@ -278,7 +280,7 @@ http.createServer(
                 MyGlobal.log("POST DATA");
             });
             req.on('end', function (data) {
-                chunk += data?data:'';
+                chunk += data ? data : '';
                 req.postdata = chunk; //extending req-object
                 MyGlobal.log("POST END");
                 do_rely(req, res);
