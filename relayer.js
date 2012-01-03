@@ -64,41 +64,43 @@ function do_rely(req, res) {
                                         defaultPort: callback_port,
                                         method:callback_method,
                                         path:'/',
-                                        agent:false
-                                        //headers:res_rely.headers
+                                        agent:false,
+                                        headers:res_rely.headers
                     };
-                    //delete callbackoptions.headers['Content-Length'];
-                    //callbackoptions.headers['Transfer-encoding']='chunked';
+
                     callback_req = http.request(callbackoptions, function(callback_res){
                         //Check 200 on callback
                          MyGlobal.log('STATUS: ' + callback_res.statusCode);
-                         MyGlobal.log('HEADERS: ' + JSON.stringify(callback_res.headers));
-                        //console.log("CALLBACK RESPONSE"+sys.inspect(callback_res));
+                        //MyGlobal.log('HEADERS: ' + JSON.stringify(callback_res.headers));
+                       //MyGlobal.log('RELAYED HEADER!!:'+ JSON.stringify(res_rely.headers));
                      });
 
                     callback_req.on('error', function(err){
                         MyGlobal.log("EXCEPTION AT CALLBACK REQUEST:"+sys.inspect(err));
                     });
 
-                    if (callbackoptions.method=='POST' && res_data){
-                        callback_req.write(res_data, 'utf8');
+                    if (res_data){
+                        callback_req.write(res_data);
                     }
                     callback_req.end();
                 }
             }
 
             var chunk = '';
-            res_rely.on("data", function (data) {
+            res_rely.on('data', function (data) {
                     chunk += data;
                 }
             );
             res_rely.on('end', function (data) {
                 chunk += data?data:'';
                 //keep in redis
-                store_data(id, res_rely, chunk);
+                //store_data(id, res_rely, chunk);
                 //send CALLBACK
                 send_callback(chunk);
+                MyGlobal.log('CHUNK:'+chunk);
             });
+
+
         }
 
         function handle_socket_exception(socketException) {
@@ -164,6 +166,7 @@ function do_rely(req, res) {
         res_status = MyGlobal.STATUS_WEIRD,
         retrieve_id = req.headers[MyGlobal.HEAD_RETRIEVE_ID] || '',
         relayer_host = req.headers[MyGlobal.HEAD_RELAYER_HOST];
+
     if (retrieve_id) {
         redis.hgetall('HR:' + retrieve_id, function (err, redis_data) {
             if (err) {
@@ -172,6 +175,7 @@ function do_rely(req, res) {
             }
             else {
                 res_header = redis_data[MyGlobal.RD_HEADER] || "";
+                res_header = JSON.parse(res_header.toString());
                 res_data = redis_data[MyGlobal.RD_DATA] || "";
                 res_data = res_data.toString();
                 res_state = redis_data[MyGlobal.RD_STATE] || "";
@@ -192,7 +196,8 @@ function do_rely(req, res) {
                     var res_data_str = sys.inspect(res_data);
                     MyGlobal.log('COMPLETED::' + res_data_str);
                 }
-                res_header['Content-Length'] = res_data.length;
+                //res_header['content-length'] = res_data.length;
+                delete res_header['content-length'];
                 res.writeHead(res_status, res_header);
                 res.write(res_data);
                 res.end();
@@ -228,7 +233,7 @@ function do_rely(req, res) {
                         }
                     });
                 res.writeHead(res_status, {
-                        'Content-Length':id.length,
+                        //'Content-Length':id.length,
                         'Content-Type':'text/plain'
                     }
                 );
@@ -241,8 +246,8 @@ function do_rely(req, res) {
                     defaultPort: relayer_port,
                     method:relayer_method,
                     path:'/',
-                    agent:false,
-                    header:{'Content-Length':postdata.length}
+                    agent:false
+                    //header:{'Content-Length':postdata.length}
                     };
 
                 relayed_req = do_relayed_request(id, options);
@@ -254,7 +259,7 @@ function do_rely(req, res) {
         //Maybe good to search for alternate
         data = "NO HEADER PRESENT:" + MyGlobal.HEAD_RELAYER_HOST;
         res.writeHead(MyGlobal.STATUS_ERROR, {
-                'Content-Length':data.length,
+                //'Content-Length':data.length,
                 'Content-Type':'text/plain'
             }
         );
@@ -270,10 +275,12 @@ http.createServer(
             var chunk = "";
             req.on('data', function (data) {
                 chunk += data;
+                MyGlobal.log("POST DATA");
             });
             req.on('end', function (data) {
                 chunk += data?data:'';
                 req.postdata = chunk; //extending req-object
+                MyGlobal.log("POST END");
                 do_rely(req, res);
             });
         }
