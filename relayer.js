@@ -1,8 +1,14 @@
+//TODO PARSE URL FROM x-relayer-URL
+//TODO DEBUG FLAG
+//TODO DB config HOST-PORT
+
 var http = require('http');
 var sys = require('util');
 var uuid = require('node-uuid');
-var DAO_module = require('relayerDAO');
+var cluster = require('cluster');
+var DAO_module = require('./relayerDAO.js');
 var DAO = new DAO_module.RelayerDAO();
+var numCPUs = require('os').cpus().length;
 //CommonJs modules make this unnecessary
 var MyGlobal = {'STATE_COMPLETED':'completed',
     'STATE_PENDING':'pending',
@@ -20,10 +26,10 @@ var MyGlobal = {'STATE_COMPLETED':'completed',
     'HEAD_RELAYER_HTTPCALLBACK':'x-relayer-httpcallback',
     'HEAD_RELAYER_HTTPCALLBACK_METHOD':'x-relayer-httpcallback_method',
     'HEAD_RELAYER_HTTPCALLBACK_PORT':'x-relayer-httpcallback_port',
-    'log':console.log,
+    'log':function () {"use strict";}, //console.log,
     'timer':setTimeout,
     inspection_str:''};
-//TODO PARSE URL FROM x-relayer-URL
+
 function do_rely(req, res) {
     "use strict";
     var retrieve_id = req.headers[MyGlobal.HEAD_RETRIEVE_ID] || '',
@@ -104,7 +110,7 @@ function do_rely(req, res) {
                     DAO.store_data(id, res_rely_headers, res_rely_status, content_data);
                     //send CALLBACK
                     send_callback(chunk);
-                    MyGlobal.log('CHUNK:' + chunk);
+                    MyGlobal.log('DATA:' + content_data);
                 });
             }
 
@@ -198,25 +204,39 @@ function do_rely(req, res) {
         res.end();
     }
 }
-http.createServer(
-    function (req, res) {
+
+if (cluster.isMaster) {
+    // Fork workers.
+    console.log("CPU::"+numCPUs)
+    for (var i = 0; i < numCPUs; i++) {
+        cluster.fork();
+    }
+    cluster.on('death', function (worker) {
         "use strict";
-        http.globalAgent.maxSockets = 100;
-        req.setEncoding('utf8');
-        if (req.method == 'POST') {
-            var chunk = "";
-            req.on('data', function (data) {
-                chunk += data;
-                MyGlobal.log("POST DATA");
-            });
-            req.on('end', function (data) {
-                chunk += data ? data : '';
-                req.postdata = chunk; //extending req-object
-                MyGlobal.log("POST END");
+        console.log('worker ' + worker.pid + ' died');
+    });
+}
+else {
+    http.createServer(
+        function (req, res) {
+            "use strict";
+            http.globalAgent.maxSockets = 100;
+            req.setEncoding('utf8');
+            if (req.method == 'POST') {
+                var chunk = "";
+                req.on('data', function (data) {
+                    chunk += data;
+                    MyGlobal.log("POST DATA");
+                });
+                req.on('end', function (data) {
+                    chunk += data ? data : '';
+                    req.postdata = chunk; //extending req-object
+                    MyGlobal.log("POST END");
+                    do_rely(req, res);
+                });
+            }
+            else {
                 do_rely(req, res);
-            });
-        }
-        else {
-            do_rely(req, res);
-        }
-    }).listen(8000);
+            }
+        }).listen(8000);
+}

@@ -22,11 +22,11 @@ var MyGlobal = {'STATE_COMPLETED':'completed',
     'RD_METHOD':'Method',
     'RD_POSTDATA':'Postdata',
     'RD_RELAYED_REQUEST':'RelayedRequest',
-    'log':console.log,
+    'log':function(){},//console.log,
     inspection_str:''};
 var redis;
 var prefix;
-function RelayerDAO(use_port, use_host, use_prefix) {
+function RelayerDAO(use_host, use_port, use_prefix) {
     "use strict";
     var port = use_port || redis_module.DEFAULT_PORT,
         host = use_host || redis_module.DEFAULT_HOST;
