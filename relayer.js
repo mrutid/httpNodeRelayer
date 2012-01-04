@@ -1,16 +1,19 @@
 //TODO PARSE URL FROM x-relayer-URL
 //TODO DEBUG FLAG
 //TODO DB config HOST-PORT
-
 var http = require('http');
 var sys = require('util');
 var uuid = require('node-uuid');
 var cluster = require('cluster');
 var DAO_module = require('./relayerDAO.js');
-var DAO = new DAO_module.RelayerDAO();
+var DAO;
 var numCPUs = require('os').cpus().length;
+var dbhost;
+var dbport;
 //CommonJs modules make this unnecessary
-var MyGlobal = {'STATE_COMPLETED':'completed',
+var MyGlobal = {
+    'args':{},
+    'STATE_COMPLETED':'completed',
     'STATE_PENDING':'pending',
     'STATE_ERROR':'error',
     'STATE_RETRY_FAIL':'retry_fail',
@@ -26,10 +29,14 @@ var MyGlobal = {'STATE_COMPLETED':'completed',
     'HEAD_RELAYER_HTTPCALLBACK':'x-relayer-httpcallback',
     'HEAD_RELAYER_HTTPCALLBACK_METHOD':'x-relayer-httpcallback_method',
     'HEAD_RELAYER_HTTPCALLBACK_PORT':'x-relayer-httpcallback_port',
-    'log':function () {"use strict";}, //console.log,
+    'PARAM_DBHOST':'dbhost',
+    'PARAM_DBPORT':'dbport',
+    'PARAM_SPAWN':'spawn',
+    'PARAM_DEBUG':'debug',
+    'PARAM_HELP':'help',
+    'log':console.log,
     'timer':setTimeout,
     inspection_str:''};
-
 function do_rely(req, res) {
     "use strict";
     var retrieve_id = req.headers[MyGlobal.HEAD_RETRIEVE_ID] || '',
@@ -204,39 +211,82 @@ function do_rely(req, res) {
         res.end();
     }
 }
-
-if (cluster.isMaster) {
-    // Fork workers.
-    console.log("CPU::"+numCPUs)
-    for (var i = 0; i < numCPUs; i++) {
-        cluster.fork();
+function extract_params() {
+    "use strict";
+    var i,
+        arg;
+    for (i = 2; i < process.argv.length; i++) {
+        //-debug
+        //-dbport port
+        //-dhost host
+        //-spawn
+        arg = process.argv[i];
+        if (arg.charAt(0) == '-') {//new param
+            MyGlobal.args[arg.substr(1)] = process.argv[++i];
+        }
     }
-    cluster.on('death', function (worker) {
-        "use strict";
-        console.log('worker ' + worker.pid + ' died');
-    });
+}
+function no_debug() {
+    "use strict";
+}
+extract_params();
+if (MyGlobal.args[MyGlobal.PARAM_HELP]) {
+    //print help and exit
+    console.log(
+            '-help :this message\n' +
+            '-dbhost HOST :DbRedis host\n' +
+            '-dbport PORT :DbRedis port\n' +
+            '-debug true  :Debug mode\n' +
+            '-spawn true  :spawn mode\n');
 }
 else {
-    http.createServer(
-        function (req, res) {
+//setting debug mode
+    MyGlobal.log = MyGlobal.args[MyGlobal.PARAM_DEBUG] ? console.log : no_debug;
+//setting DB
+    if (MyGlobal.args[MyGlobal.PARAM_DBHOST]) {
+        dbhost = MyGlobal.args[MyGlobal.PARAM_DBHOST];
+    }
+    if (MyGlobal.args[MyGlobal.PARAM_DBPORT]) {
+        dbport = MyGlobal.args[MyGlobal.PARAM_DBPORT];
+    }
+    DAO = new DAO_module.RelayerDAO(dbhost, dbport);
+//Launchin clusters
+    if (cluster.isMaster) {
+        // Fork workers.
+        MyGlobal.log("CPU::" + numCPUs);
+        for (var i = 0; i < numCPUs; i++) {
+            cluster.fork();
+            if (!MyGlobal.args[MyGlobal.PARAM_SPAWN]) {
+                break;
+            } //just one child
+        }
+        cluster.on('death', function (worker) {
             "use strict";
-            http.globalAgent.maxSockets = 100;
-            req.setEncoding('utf8');
-            if (req.method == 'POST') {
-                var chunk = "";
-                req.on('data', function (data) {
-                    chunk += data;
-                    MyGlobal.log("POST DATA");
-                });
-                req.on('end', function (data) {
-                    chunk += data ? data : '';
-                    req.postdata = chunk; //extending req-object
-                    MyGlobal.log("POST END");
+            MyGlobal.log('worker ' + worker.pid + ' died');
+        });
+    }
+    else {
+        http.createServer(
+            function (req, res) {
+                "use strict";
+                http.globalAgent.maxSockets = 100;
+                req.setEncoding('utf8');
+                if (req.method == 'POST') {
+                    var chunk = "";
+                    req.on('data', function (data) {
+                        chunk += data;
+                        MyGlobal.log("POST DATA");
+                    });
+                    req.on('end', function (data) {
+                        chunk += data ? data : '';
+                        req.postdata = chunk; //extending req-object
+                        MyGlobal.log("POST END");
+                        do_rely(req, res);
+                    });
+                }
+                else {
                     do_rely(req, res);
-                });
-            }
-            else {
-                do_rely(req, res);
-            }
-        }).listen(8000);
+                }
+            }).listen(8000);
+    }
 }
