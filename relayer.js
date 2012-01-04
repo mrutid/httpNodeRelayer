@@ -1,7 +1,5 @@
 var http = require('http');
 var sys = require('util');
-var redis_module = require('redis-client');
-var redis = redis_module.createClient(redis_module.DEFAULT_PORT, redis_module.DEFAULT_HOST);
 var DAO_module = require('relayerDAO');
 var DAO = new DAO_module.RelayerDAO();
 //CommonJs modules make this unnecessary
