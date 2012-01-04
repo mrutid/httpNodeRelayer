@@ -1,5 +1,6 @@
 var http = require('http');
 var sys = require('util');
+var uuid = require('node-uuid');
 var DAO_module = require('relayerDAO');
 var DAO = new DAO_module.RelayerDAO();
 //CommonJs modules make this unnecessary
@@ -33,7 +34,7 @@ function do_rely(req, res) {
                 dao_data.res_status = MyGlobal.STATUS_ERROR;
             }
             else {
-                if (dao_data.res_state== MyGlobal.STATE_PENDING) {
+                if (dao_data.res_state == MyGlobal.STATE_PENDING) {
                     dao_data.res_data = "Not Yet -pending-";
                     dao_data.res_status = MyGlobal.STATUS_ERROR;
                     dao_data.res_header = req.headers;
@@ -149,40 +150,35 @@ function do_rely(req, res) {
             return relayed_req;
         }
 
-        var res_status = MyGlobal.STATUS_WEIRD,
-            options;
-        DAO.get_id(function (err, idsec) {
-            if (!err) {
-                var relayer_method = req.headers[MyGlobal.HEAD_RELAYER_METHOD] || 'GET',
-                    relayer_port = req.headers[MyGlobal.HEAD_RELAYER_PORT] || '80',
-                    relayed_req,
-                    id,
-                    postdata;
-                MyGlobal.log("ID_SEC: 'HR:GLOBAL_ID_SEQ:'" + idsec);
-                id = idsec.toString(); //+new Date().getTime();
-                res_status = MyGlobal.STATUS_OK;
-                postdata = req.postdata ? req.postdata : '';
-                DAO.update_pending(id, relayer_host, req.method, postdata, function (err) {
-                    if (err) {
-                        res_status = MyGlobal.STATUS_WEIRD; //something weird happens //
-                    }
-                });
-                //Quick answer to client
-                res.writeHead(res_status);
-                res.write(id);
-                res.end();
-                //Redirect request
-                options = {
-                    host:relayer_host,
-                    port:relayer_port,
-                    defaultPort:relayer_port,
-                    method:relayer_method,
-                    path:'/'
-                };
-                relayed_req = do_relayed_request(id, options);
-                relayed_req.end();
+        var res_status,
+            options,
+            relayer_method = req.headers[MyGlobal.HEAD_RELAYER_METHOD] || 'GET',
+            relayer_port = req.headers[MyGlobal.HEAD_RELAYER_PORT] || '80',
+            relayed_req,
+            id,
+            postdata;
+        id = uuid.v1();
+        res_status = MyGlobal.STATUS_OK;
+        postdata = req.postdata ? req.postdata : '';
+        DAO.update_pending(id, relayer_host, req.method, postdata, function (err) {
+            if (err) {
+                res_status = MyGlobal.STATUS_WEIRD; //something weird happens //
             }
         });
+        //Quick answer to client
+        res.writeHead(res_status);
+        res.write(id);
+        res.end();
+        //Redirect request
+        options = {
+            host:relayer_host,
+            port:relayer_port,
+            defaultPort:relayer_port,
+            method:relayer_method,
+            path:'/'
+        };
+        relayed_req = do_relayed_request(id, options);
+        relayed_req.end();
     }
 
     //Main OP DISPATCHING
