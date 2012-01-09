@@ -7,7 +7,9 @@
  */
 //REDIS DAO - node module
 var redis_module = require('redis-client');
-var sys = require('util');
+var util = require('util');
+var logger = require('./simpleLogger').log;
+
 var MyGlobal = {'STATE_COMPLETED':'completed',
     'STATE_PENDING':'pending',
     'STATE_ERROR':'error',
@@ -22,38 +24,46 @@ var MyGlobal = {'STATE_COMPLETED':'completed',
     'RD_METHOD':'Method',
     'RD_POSTDATA':'Postdata',
     'RD_RELAYED_REQUEST':'RelayedRequest',
-    'log':function(){},//console.log,
-    inspection_str:''};
-var redis;
-var prefix;
-function RelayerDAO(use_host, use_port, use_prefix) {
+     inspection_str:''},
+     log=logger.log;
+
+
+
+RelayerDAO = (function(){
     "use strict";
-    var port = use_port || redis_module.DEFAULT_PORT,
+var redis,
+    redis_key_prefix;
+
+
+exports.ini = function _init(use_host, use_port, use_prefix) {
+
+    var
+        port = use_port || redis_module.DEFAULT_PORT,
         host = use_host || redis_module.DEFAULT_HOST;
-    prefix = use_prefix || "HR";
+
+    redis_key_prefix = use_prefix || "HR:";
     try {
         redis = redis_module.createClient(port, host);
     }
     catch(excp){
-        MyGlobal.log("ERROR CONNECTING to REDIS:"+host+":"+port);
-        MyGlobal.inspection_str = sys.inspect(excp);
-        MyGlobal.log(MyGlobal.inspection_str);
+        log("ERROR CONNECTING to REDIS:"+host+":"+port);
+        MyGlobal.inspection_str = util.inspect(excp);
+        log(MyGlobal.inspection_str);
     }
-}
-RelayerDAO.prototype.store_data = function (id, str_header, str_status, content, callback) {
-    "use strict";
-    redis.hmset(prefix + id,
+};
+exports.store_data = function _store_data(id, str_header, str_status, content, callback) {
+    redis.hmset(redis_key_prefix + id,
         MyGlobal.RD_STATE, MyGlobal.STATE_COMPLETED,
         MyGlobal.RD_HEADER, str_header,
         MyGlobal.RD_STATUSCODE, str_status,
         MyGlobal.RD_DATA, content,
         function (err) {
             if (err) {
-                MyGlobal.inspection_str = sys.inspect(err);
-                MyGlobal.log("DB error (Can not insert):" + MyGlobal.inspection_str);
+                MyGlobal.inspection_str = util.inspect(err);
+                log("DB error (Can not insert):" + MyGlobal.inspection_str);
             }
             else {
-                MyGlobal.log("Kept response for:" + id);
+                log("Kept response for:" + id);
             }
             if (callback) {
                 callback(err);
@@ -61,47 +71,44 @@ RelayerDAO.prototype.store_data = function (id, str_header, str_status, content,
         }
     );
 };
-RelayerDAO.prototype.update_retry_fail = function (id, callback) {
-    "use strict";
-    redis.hset(prefix + id,
+exports.update_retry_fail = function _update_retry_fail(id, callback) {
+    redis.hset(redis_key_prefix + id,
         MyGlobal.RD_STATE, MyGlobal.STATE_RETRY_FAIL,
         function (err) {
             if (err) {
-                MyGlobal.inspection_str = sys.inspect(err);
-                MyGlobal.log("DB error (Can not insert-retryfail):" + MyGlobal.inspection_str);
+                MyGlobal.inspection_str = util.inspect(err);
+                log("DB error (Can not insert-retryfail):" + MyGlobal.inspection_str);
             }
             else {
-                MyGlobal.log("Retry-fail added for:" + id);
+                log("Retry-fail added for:" + id);
             }
             if (callback) {
                 callback(err);
             }
         });
 };
-RelayerDAO.prototype.update_pending = function (id, relayer_host, method, postdata, callback) {
-    "use strict";
-    redis.hmset(prefix + id,
+exports.update_pending = function _update_pending(id, relayer_host, method, postdata, callback) {
+    redis.hmset(redis_key_prefix + id,
         MyGlobal.RD_STATE, MyGlobal.STATE_PENDING,
         MyGlobal.RD_RELAYED_REQUEST, relayer_host,
         MyGlobal.RD_METHOD, method,
         MyGlobal.RD_POSTDATA, postdata,
         function (err) {
             if (err) {
-                MyGlobal.inspection_str = sys.inspect(err);
-                MyGlobal.log('WARN -(go) DB Can not insert:' + MyGlobal.inspection_str);
+                MyGlobal.inspection_str = util.inspect(err);
+                log('WARN -(go) DB Can not insert:' + MyGlobal.inspection_str);
             }
             if (callback) {
                 callback(err);
             }
         });
 };
-RelayerDAO.prototype.get_all = function (id, callback) {
-    "use strict";
-    redis.hgetall(prefix + id, function (err, redis_data) {
+exports.get_all = function _get_all(id, callback) {
+    redis.hgetall(redis_key_prefix + id, function (err, redis_data) {
         var ret_data = {};
         if (err) {
-            MyGlobal.inspection_str = sys.inspect(err);
-            MyGlobal.log('DB can\'t retrieve your data' + MyGlobal.inspection_str);
+            MyGlobal.inspection_str = util.inspect(err);
+            log('DB can\'t retrieve your data' + MyGlobal.inspection_str);
         }
         else {
             ret_data.res_header = redis_data[MyGlobal.RD_HEADER] || "";
@@ -119,18 +126,18 @@ RelayerDAO.prototype.get_all = function (id, callback) {
         }
     });
 };
-RelayerDAO.prototype.get_id = function (callback) {
-    "use strict";
-    redis.incr(prefix + 'GLOBAL_ID_SEQ', function (err, idsec) {
+exports.get_id = function _get_id(callback) {
+    redis.incr(redis_key_prefix + 'GLOBAL_ID_SEQ', function (err, idsec) {
         if (err) {
-            MyGlobal.log("Problems getting ID_SEC: 'HR:GLOBAL_ID_SEQ'");
+            log("Problems getting ID_SEC: 'HR:GLOBAL_ID_SEQ'");
         }
         else {
-            MyGlobal.log("ID_SEC: 'HR:GLOBAL_ID_SEQ:'" + idsec);
+            log("ID_SEC: 'HR:GLOBAL_ID_SEQ:'" + idsec);
         }
         if (callback) {
             callback(err, idsec);
         }
     });
 };
-exports.RelayerDAO = RelayerDAO;
+
+})();

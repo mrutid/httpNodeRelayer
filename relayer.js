@@ -2,14 +2,16 @@
 //TODO DEBUG FLAG
 //TODO DB config HOST-PORT
 var http = require('http');
-var sys = require('util');
+var util = require('util');
 var uuid = require('node-uuid');
 var cluster = require('cluster');
-var DAO_module = require('./relayerDAO.js');
-var DAO;
+var DAO= require('./relayerDAO');
+var logger = require('./simpleLogger').log;
+var log = logger.log;
 var numCPUs = require('os').cpus().length;
 var dbhost;
 var dbport;
+
 //CommonJs modules make this unnecessary
 var MyGlobal = {
     'args':{},
@@ -34,9 +36,8 @@ var MyGlobal = {
     'PARAM_SPAWN':'spawn',
     'PARAM_DEBUG':'debug',
     'PARAM_HELP':'help',
-    'log':console.log,
     'timer':setTimeout,
-    inspection_str:''};
+     inspection_str:''};
 function do_rely(req, res) {
     "use strict";
     var retrieve_id = req.headers[MyGlobal.HEAD_RETRIEVE_ID] || '',
@@ -58,8 +59,8 @@ function do_rely(req, res) {
                     dao_data.res_header = req.headers;
                 }
                 else if (dao_data.res_state == MyGlobal.STATE_COMPLETED) {
-                    var res_data_str = sys.inspect(dao_data.res_data);
-                    MyGlobal.log('COMPLETED::' + res_data_str);
+                    var res_data_str = util.inspect(dao_data.res_data);
+                    log('COMPLETED::' + res_data_str);
                 }
                 delete dao_data.res_header['content-length'];
                 res.writeHead(dao_data.res_status, dao_data.res_header);
@@ -89,13 +90,13 @@ function do_rely(req, res) {
                         };
                         callback_req = http.request(callbackoptions, function (callback_res) {
                             //Check 200 on callback
-                            MyGlobal.log('STATUS: ' + callback_res.statusCode);
-                            //MyGlobal.log('HEADERS: ' + JSON.stringify(callback_res.headers));
-                            //MyGlobal.log('RELAYED HEADER!!:'+ JSON.stringify(res_rely.headers));
+                            log('STATUS: ' + callback_res.statusCode);
+                            //log('HEADERS: ' + JSON.stringify(callback_res.headers));
+                            //log('RELAYED HEADER!!:'+ JSON.stringify(res_rely.headers));
                         });
                         callback_req.on('error', function (err) {
-                            MyGlobal.inspection_str = sys.inspect(err);
-                            MyGlobal.log("EXCEPTION AT CALLBACK REQUEST:" + MyGlobal.inspection_str);
+                            MyGlobal.inspection_str = util.inspect(err);
+                            log("EXCEPTION AT CALLBACK REQUEST:" + MyGlobal.inspection_str);
                         });
                         if (res_data) {
                             callback_req.write(res_data);
@@ -117,17 +118,17 @@ function do_rely(req, res) {
                     DAO.store_data(id, res_rely_headers, res_rely_status, content_data);
                     //send CALLBACK
                     send_callback(chunk);
-                    MyGlobal.log('DATA:' + content_data);
+                    log('DATA:' + content_data);
                 });
             }
 
             function handle_socket_exception(socketException) {
                 function retry_timeout_handler() {
                     function retry_manage_fail(socketException) {
-                        MyGlobal.log("WARN: Retry Fail");
+                        log("WARN: Retry Fail");
                         if (socketException) {
-                            MyGlobal.inspection_str = sys.inspect(socketException);
-                            sys.log('RETRY::SocketException:' + MyGlobal.inspection_str);
+                            MyGlobal.inspection_str = util.inspect(socketException);
+                            log('RETRY::SocketException:' + MyGlobal.inspection_str);
                         }
                         DAO.update_retry_fail(id);
                     }
@@ -135,22 +136,22 @@ function do_rely(req, res) {
                     var try_relayed_req;
                     try_relayed_req = do_relayed_request(id, options); //no more retries
                     try_relayed_req.end();
-                    MyGlobal.log('RETRY LAUNCH');
+                    log('RETRY LAUNCH');
                     try_relayed_req.on('error', retry_manage_fail);
                 }
 
                 var retry = req.headers[MyGlobal.HEAD_RELAYER_RETRY] || false,
                     alternate_url = req.headers[MyGlobal.HEAD_RELAYER_ALTHOST] || false;
                 if (socketException) {
-                    MyGlobal.inspection_str = sys.inspect(socketException);
-                    sys.log('HANDLE_SOCKT:: SocketException:' + MyGlobal.inspection_str);
+                    MyGlobal.inspection_str = util.inspect(socketException);
+                    log('HANDLE_SOCKT:: SocketException:' + MyGlobal.inspection_str);
                 }
                 if (retry) {
                     if (alternate_url) {
                         options.host = alternate_url;
                     }
-                    MyGlobal.inspection_str = sys.inspect(options);
-                    MyGlobal.log('RETRY to' + MyGlobal.inspection_str);
+                    MyGlobal.inspection_str = util.inspect(options);
+                    log('RETRY to' + MyGlobal.inspection_str);
                     MyGlobal.timer(retry_timeout_handler, 5000); //delay interval
                 }
             }
@@ -226,9 +227,8 @@ function extract_params() {
         }
     }
 }
-function no_debug() {
-    "use strict";
-}
+
+
 extract_params();
 if (MyGlobal.args[MyGlobal.PARAM_HELP]) {
     //print help and exit
@@ -241,7 +241,8 @@ if (MyGlobal.args[MyGlobal.PARAM_HELP]) {
 }
 else {
 //setting debug mode
-    MyGlobal.log = MyGlobal.args[MyGlobal.PARAM_DEBUG] ? console.log : no_debug;
+    logger.set_prefix("RLY::");
+    logger.set_enabled(MyGlobal.args[MyGlobal.PARAM_DEBUG]? true : false);
 //setting DB
     if (MyGlobal.args[MyGlobal.PARAM_DBHOST]) {
         dbhost = MyGlobal.args[MyGlobal.PARAM_DBHOST];
@@ -249,11 +250,13 @@ else {
     if (MyGlobal.args[MyGlobal.PARAM_DBPORT]) {
         dbport = MyGlobal.args[MyGlobal.PARAM_DBPORT];
     }
-    DAO = new DAO_module.RelayerDAO(dbhost, dbport);
-//Launchin clusters
+
+    DAO.ini(dbhost, dbport);
+
+    //Launching clusters
     if (cluster.isMaster) {
         // Fork workers.
-        MyGlobal.log("CPU::" + numCPUs);
+        log("CPU::" + numCPUs);
         for (var i = 0; i < numCPUs; i++) {
             cluster.fork();
             if (!MyGlobal.args[MyGlobal.PARAM_SPAWN]) {
@@ -262,7 +265,7 @@ else {
         }
         cluster.on('death', function (worker) {
             "use strict";
-            MyGlobal.log('worker ' + worker.pid + ' died');
+            log('worker ' + worker.pid + ' died');
         });
     }
     else {
@@ -275,12 +278,12 @@ else {
                     var chunk = "";
                     req.on('data', function (data) {
                         chunk += data;
-                        MyGlobal.log("POST DATA");
+                        log("POST DATA");
                     });
                     req.on('end', function (data) {
                         chunk += data ? data : '';
                         req.postdata = chunk; //extending req-object
-                        MyGlobal.log("POST END");
+                        log("POST END");
                         do_rely(req, res);
                     });
                 }
