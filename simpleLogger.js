@@ -25,13 +25,12 @@ exports.log = (function simpleLogger() {
             if (_enabled) {
                 utils.log(_prefix + '::' + str);
             }
-        },
-        my = {
+        };
+
+        return {
             log:_log,
             set_prefix : _set_prefix,
             set_level : _set_level,
             set_enabled : _set_enabled
         };
-    return my;
 })();
-
