@@ -3,17 +3,15 @@
 //TODO DB config HOST-PORT
 var http = require('http');
 var util = require('util');
-var url = require('url');
 var uuid = require('node-uuid');
 var cluster = require('cluster');
-var DAO = require('./relayerDAO');
+var DAO= require('./relayerDAO');
 var logger = require('./simpleLogger').log;
 var log = logger.log;
-var mail = require('./mailAgent');
 var numCPUs = require('os').cpus().length;
 var dbhost;
 var dbport;
-var parsed_url;
+
 //CommonJs modules make this unnecessary
 var MyGlobal = {
     'args':{},
@@ -39,13 +37,11 @@ var MyGlobal = {
     'PARAM_DEBUG':'debug',
     'PARAM_HELP':'help',
     'timer':setTimeout,
-    inspection_str:''};
-function do_rely(req, res, parsed_url) {
+     inspection_str:''};
+function do_rely(req, res) {
     "use strict";
     var retrieve_id = req.headers[MyGlobal.HEAD_RETRIEVE_ID] || '',
-        relayer_host = req.headers[MyGlobal.HEAD_RELAYER_HOST], //accessed via clousure by inner HNDfunctions
-        mail_relay = (parsed_url.pathname == '/sendmail');
-
+        relayer_host = req.headers[MyGlobal.HEAD_RELAYER_HOST];  //accessed via clousure by inner HNDfunctions
     function retrieve_handler(retrieve_id) {
         DAO.get_all(retrieve_id, function (err, dao_data) {
             if (err) {
@@ -200,14 +196,8 @@ function do_rely(req, res, parsed_url) {
     }
 
     //Main OP DISPATCHING
-    if (mail_relay) {
-        mail.send_with_template({foo:"fooooo", email:"FOO EMAIL"});
-        res.writeHead(MyGlobal.STATUS_OK, {'Content-Type':'text/plain'});
-        res.write("Relayed mail Mail Received");
-        res.end();
-    }
     //Retrieve
-    else if (retrieve_id) {
+    if (retrieve_id) {
         retrieve_handler();
     }
     //Rely
@@ -237,11 +227,13 @@ function extract_params() {
         }
     }
 }
+
+
 extract_params();
 if (MyGlobal.args[MyGlobal.PARAM_HELP]) {
     //print help and exit
     console.log(
-        '-help :this message\n' +
+            '-help :this message\n' +
             '-dbhost HOST :DbRedis host\n' +
             '-dbport PORT :DbRedis port\n' +
             '-debug true  :Debug mode\n' +
@@ -250,7 +242,7 @@ if (MyGlobal.args[MyGlobal.PARAM_HELP]) {
 else {
 //setting debug mode
     logger.set_prefix("RLY::");
-    logger.set_enabled(MyGlobal.args[MyGlobal.PARAM_DEBUG] ? true : false);
+    logger.set_enabled(MyGlobal.args[MyGlobal.PARAM_DEBUG]? true : false);
 //setting DB
     if (MyGlobal.args[MyGlobal.PARAM_DBHOST]) {
         dbhost = MyGlobal.args[MyGlobal.PARAM_DBHOST];
@@ -258,7 +250,9 @@ else {
     if (MyGlobal.args[MyGlobal.PARAM_DBPORT]) {
         dbport = MyGlobal.args[MyGlobal.PARAM_DBPORT];
     }
+
     DAO.ini(dbhost, dbport);
+
     //Launching clusters
     if (cluster.isMaster) {
         // Fork workers.
@@ -275,12 +269,11 @@ else {
         });
     }
     else {
-        http.globalAgent.maxSockets = 100;
         http.createServer(
             function (req, res) {
                 "use strict";
+                http.globalAgent.maxSockets = 100;
                 req.setEncoding('utf8');
-                parsed_url = url.parse(req.url, true);
                 if (req.method == 'POST') {
                     var chunk = "";
                     req.on('data', function (data) {
@@ -291,11 +284,11 @@ else {
                         chunk += data ? data : '';
                         req.postdata = chunk; //extending req-object
                         log("POST END");
-                        do_rely(req, res, parsed_url);
+                        do_rely(req, res);
                     });
                 }
                 else {
-                    do_rely(req, res, parsed_url);
+                    do_rely(req, res);
                 }
             }).listen(8000);
     }
