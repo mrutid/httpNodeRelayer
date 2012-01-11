@@ -9,33 +9,14 @@
 var redis_module = require('redis-client');
 var util = require('util');
 var logger = require('./simpleLogger').log;
-
-var MyGlobal = {'STATE_COMPLETED':'completed',
-    'STATE_PENDING':'pending',
-    'STATE_ERROR':'error',
-    'STATE_RETRY_FAIL':'retry_fail',
-    'STATUS_OK':'200',
-    'STATUS_ERROR':'404',
-    'STATUS_WEIRD':'500',
-    'RD_STATE':'State',
-    'RD_HEADER':'Header',
-    'RD_STATUSCODE':'StatusCode',
-    'RD_DATA':'Data',
-    'RD_METHOD':'Method',
-    'RD_POSTDATA':'Postdata',
-    'RD_RELAYED_REQUEST':'RelayedRequest',
-     inspection_str:''},
-     log=logger.log;
-
-
-
-RelayerDAO = (function(){
-    "use strict";
+var MyGlobal = require('./constantModule').Global;
+var log=logger.log;
 var redis,
     redis_key_prefix;
 
 
 exports.ini = function _init(use_host, use_port, use_prefix) {
+    "use strict";
 
     var
         port = use_port || redis_module.DEFAULT_PORT,
@@ -52,6 +33,8 @@ exports.ini = function _init(use_host, use_port, use_prefix) {
     }
 };
 exports.store_data = function _store_data(id, str_header, str_status, content, callback) {
+    "use strict";
+
     redis.hmset(redis_key_prefix + id,
         MyGlobal.RD_STATE, MyGlobal.STATE_COMPLETED,
         MyGlobal.RD_HEADER, str_header,
@@ -72,6 +55,8 @@ exports.store_data = function _store_data(id, str_header, str_status, content, c
     );
 };
 exports.update_retry_fail = function _update_retry_fail(id, callback) {
+    "use strict";
+
     redis.hset(redis_key_prefix + id,
         MyGlobal.RD_STATE, MyGlobal.STATE_RETRY_FAIL,
         function (err) {
@@ -88,6 +73,8 @@ exports.update_retry_fail = function _update_retry_fail(id, callback) {
         });
 };
 exports.update_pending = function _update_pending(id, relayer_host, method, postdata, callback) {
+    "use strict";
+
     redis.hmset(redis_key_prefix + id,
         MyGlobal.RD_STATE, MyGlobal.STATE_PENDING,
         MyGlobal.RD_RELAYED_REQUEST, relayer_host,
@@ -104,6 +91,8 @@ exports.update_pending = function _update_pending(id, relayer_host, method, post
         });
 };
 exports.get_all = function _get_all(id, callback) {
+    "use strict";
+
     redis.hgetall(redis_key_prefix + id, function (err, redis_data) {
         var ret_data = {};
         if (err) {
@@ -127,6 +116,7 @@ exports.get_all = function _get_all(id, callback) {
     });
 };
 exports.get_id = function _get_id(callback) {
+    "use strict";
     redis.incr(redis_key_prefix + 'GLOBAL_ID_SEQ', function (err, idsec) {
         if (err) {
             log("Problems getting ID_SEC: 'HR:GLOBAL_ID_SEQ'");
@@ -139,5 +129,3 @@ exports.get_id = function _get_id(callback) {
         }
     });
 };
-
-})();
