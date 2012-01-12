@@ -15,6 +15,7 @@ var
  redis,
  redis_key_prefix;
 
+
 exports.ini = function _init(use_host, use_port, use_prefix) {
     "use strict";
     var
@@ -30,6 +31,7 @@ exports.ini = function _init(use_host, use_port, use_prefix) {
         log(MyGlobal.inspection_str);
     }
 };
+
 exports.store_data = function _store_data(id, str_header, str_status, content, callback) {
     "use strict";
     redis.hmset(redis_key_prefix + id,
@@ -109,6 +111,8 @@ exports.get_all = function _get_all(id, callback) {
         }
     });
 };
+
+/*
 exports.get_id = function _get_id(callback) {
     "use strict";
     redis.incr(redis_key_prefix + 'GLOBAL_ID_SEQ', function (err, idsec) {
@@ -123,3 +127,4 @@ exports.get_id = function _get_id(callback) {
         }
     });
 };
+*/

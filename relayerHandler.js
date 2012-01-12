@@ -10,6 +10,7 @@ var
  http = require('http'),
  util = require('util'),
  uuid = require('node-uuid'),
+ flow = require('async'),
  logger = require('./simpleLogger').log,
  mail = require('./mailAgent'),
  MyGlobal = require('./constantModule').Global,
@@ -159,20 +160,33 @@ exports.do_rely = function (req, res, parsed_url, dao) {
         id = uuid.v1();
         res_status = MyGlobal.STATUS_OK;
         postdata = req.postdata ? req.postdata : '';
-        dao.update_pending(id, relayer_host, req.method, postdata, function (err) {
+
+        //defining for serial execution async.js
+        function update_first(callback){
+            dao.update_pending(id, relayer_host, req.method, postdata, function (err) {
             if (err) {
                 res_status = MyGlobal.STATUS_WEIRD; //something weird happens //
             }
-            options = {
-                        host:relayer_host,
-                        port:relayer_port,
-                        defaultPort:relayer_port,
-                        method:relayer_method,
-                        path:'/'
-                    };
-                    relayed_req = do_relayed_request(id, options);
-                    relayed_req.end();
+            callback(null, 'stored');
         });
+        }
+
+        function request_later (callback){
+            options = {
+                                host:relayer_host,
+                                port:relayer_port,
+                                defaultPort:relayer_port,
+                                method:relayer_method,
+                                path:'/'
+                            };
+            relayed_req = do_relayed_request(id, options);
+            relayed_req.end();
+            callback(null, "request sent");
+        }
+        //launch in series
+        flow.series([update_first, request_later], function(err, result){
+                    log('SERIAL::'+util.inspect(err)+'::'+util.inspect(result));
+                });
 
         //Quick answer to client
         res.writeHead(res_status);
