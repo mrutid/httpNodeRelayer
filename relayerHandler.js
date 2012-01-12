@@ -61,7 +61,7 @@ exports.do_rely = function (req, res, parsed_url, dao) {
                         callback_method = 'POST',
                         callback_req,
                         callbackoptions;
-                    
+
                     if (callback_host) {
                         callbackoptions = {
                             host:callback_host,
@@ -147,7 +147,7 @@ exports.do_rely = function (req, res, parsed_url, dao) {
             return relayed_req;
         }
 
-    //function rely:handler
+    //function rely_handler
 
         var res_status,
             options,
@@ -163,6 +163,15 @@ exports.do_rely = function (req, res, parsed_url, dao) {
             if (err) {
                 res_status = MyGlobal.STATUS_WEIRD; //something weird happens //
             }
+            options = {
+                        host:relayer_host,
+                        port:relayer_port,
+                        defaultPort:relayer_port,
+                        method:relayer_method,
+                        path:'/'
+                    };
+                    relayed_req = do_relayed_request(id, options);
+                    relayed_req.end();
         });
 
         //Quick answer to client
@@ -170,15 +179,7 @@ exports.do_rely = function (req, res, parsed_url, dao) {
         res.write(id);
         res.end();
         //Redirect request
-        options = {
-            host:relayer_host,
-            port:relayer_port,
-            defaultPort:relayer_port,
-            method:relayer_method,
-            path:'/'
-        };
-        relayed_req = do_relayed_request(id, options);
-        relayed_req.end();
+
     }
 
     function send_mail_handler() {
