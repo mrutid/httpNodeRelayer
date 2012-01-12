@@ -6,35 +6,32 @@
  * To change this template use File | Settings | File Templates.
  */
 //REDIS DAO - node module
-var redis_module = require('redis-client');
-var util = require('util');
-var logger = require('./simpleLogger').log;
-var MyGlobal = require('./constantModule').Global;
-var log=logger.log;
-var redis,
-    redis_key_prefix;
-
+var
+ redis_module = require('redis-client'),
+ util = require('util'),
+ logger = require('./simpleLogger').log,
+ MyGlobal = require('./constantModule').Global,
+ log = logger.log,
+ redis,
+ redis_key_prefix;
 
 exports.ini = function _init(use_host, use_port, use_prefix) {
     "use strict";
-
     var
         port = use_port || redis_module.DEFAULT_PORT,
         host = use_host || redis_module.DEFAULT_HOST;
-
     redis_key_prefix = use_prefix || "HR:";
     try {
         redis = redis_module.createClient(port, host);
     }
-    catch(excp){
-        log("ERROR CONNECTING to REDIS:"+host+":"+port);
+    catch (excp) {
+        log("ERROR CONNECTING to REDIS:" + host + ":" + port);
         MyGlobal.inspection_str = util.inspect(excp);
         log(MyGlobal.inspection_str);
     }
 };
 exports.store_data = function _store_data(id, str_header, str_status, content, callback) {
     "use strict";
-
     redis.hmset(redis_key_prefix + id,
         MyGlobal.RD_STATE, MyGlobal.STATE_COMPLETED,
         MyGlobal.RD_HEADER, str_header,
@@ -56,7 +53,6 @@ exports.store_data = function _store_data(id, str_header, str_status, content, c
 };
 exports.update_retry_fail = function _update_retry_fail(id, callback) {
     "use strict";
-
     redis.hset(redis_key_prefix + id,
         MyGlobal.RD_STATE, MyGlobal.STATE_RETRY_FAIL,
         function (err) {
@@ -74,7 +70,6 @@ exports.update_retry_fail = function _update_retry_fail(id, callback) {
 };
 exports.update_pending = function _update_pending(id, relayer_host, method, postdata, callback) {
     "use strict";
-
     redis.hmset(redis_key_prefix + id,
         MyGlobal.RD_STATE, MyGlobal.STATE_PENDING,
         MyGlobal.RD_RELAYED_REQUEST, relayer_host,
@@ -92,7 +87,6 @@ exports.update_pending = function _update_pending(id, relayer_host, method, post
 };
 exports.get_all = function _get_all(id, callback) {
     "use strict";
-
     redis.hgetall(redis_key_prefix + id, function (err, redis_data) {
         var ret_data = {};
         if (err) {

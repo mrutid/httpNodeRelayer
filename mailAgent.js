@@ -5,27 +5,24 @@
  * Time: 13:19
  * To change this template use File | Settings | File Templates.
  */
-var logger= require('./simpleLogger');
+var logger = require('./simpleLogger');
 var util = require('util');
 var mailer = require('nodemailer');
 var log = logger.log.log;
-
 // one time action to set up SMTP information
-    mailer.SMTP = {
-        host: 'tid'
-    };
-
-exports.send = function(data){
+mailer.SMTP = {
+    host:'tid'
+};
+exports.send = function (data) {
     "use strict";
-
-    log("SENT MAIL(STR)::"+data);
+    log("SENT MAIL(STR)::" + data);
     data = JSON.parse(data);
     var str = util.inspect(data);
-    log("SENT MAIL::"+str);
-    mailer.send_mail(data, function(err, result){
-        if (err){
+    log("SENT MAIL::" + str);
+    mailer.send_mail(data, function (err, result) {
+        if (err) {
             str = util.inspect(err);
-            log("ERROR SENDING EMAIL::"+str);
+            log("ERROR SENDING EMAIL::" + str);
         }
     });
 };

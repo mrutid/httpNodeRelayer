@@ -5,7 +5,8 @@
  * Time: 19:46
  * To change this template use File | Settings | File Templates.
  */
-//Singleton
+
+//It's extrange, it's Singleton
 exports.log = (function simpleLogger() {
     "use strict";
     var utils = require('util'),
@@ -26,12 +27,11 @@ exports.log = (function simpleLogger() {
                 utils.log(_prefix + '::' + str);
             }
         };
-
-        return {
-            log:_log,
-            set_prefix : _set_prefix,
-            set_level : _set_level,
-            set_enabled : _set_enabled
-        };
+    return {
+        log:_log,
+        set_prefix:_set_prefix,
+        set_level:_set_level,
+        set_enabled:_set_enabled
+    };
 })();
 

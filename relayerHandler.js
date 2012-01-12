@@ -6,25 +6,24 @@
  * To change this template use File | Settings | File Templates.
  */
 
-var http = require('http');
-var util = require('util');
-var url = require('url');
-var uuid = require('node-uuid');
-var cluster = require('cluster');
-var DAO = require('./relayerDAO');
-var logger = require('./simpleLogger').log;
-var mail = require('./mailAgent');
-var MyGlobal = require('./constantModule').Global;
-var log = logger.log;
-var dbhost;
-var dbport;
+var
+ http = require('http'),
+ util = require('util'),
+ uuid = require('node-uuid'),
+ logger = require('./simpleLogger').log,
+ mail = require('./mailAgent'),
+ MyGlobal = require('./constantModule').Global,
+ log = logger.log,
+ dbhost,
+ dbport;
 
-exports.do_rely = function (req, res, parsed_url) {
+exports.do_rely = function (req, res, parsed_url, dao) {
     "use strict";
     var retrieve_id = req.headers[MyGlobal.HEAD_RETRIEVE_ID] || '',
         relayer_host = req.headers[MyGlobal.HEAD_RELAYER_HOST];  //accessed via clousure by inner HNDfunctions
+
     function retrieve_handler(retrieve_id) {
-        DAO.get_all(retrieve_id, function (err, dao_data) {
+        dao.get_all(retrieve_id, function (err, dao_data) {
             if (err) {
                 dao_data.res_status = MyGlobal.STATUS_ERROR;
                 dao_data.res_header = {'Content-Type':'text/plain'};
@@ -62,6 +61,7 @@ exports.do_rely = function (req, res, parsed_url) {
                         callback_method = 'POST',
                         callback_req,
                         callbackoptions;
+                    
                     if (callback_host) {
                         callbackoptions = {
                             host:callback_host,
@@ -98,7 +98,7 @@ exports.do_rely = function (req, res, parsed_url) {
                     //keep in DB
                     var res_rely_status = res_rely.statusCode,
                         res_rely_headers = JSON.stringify(res_rely.headers);
-                    DAO.store_data(id, res_rely_headers, res_rely_status, content_data);
+                    dao.store_data(id, res_rely_headers, res_rely_status, content_data);
                     //send CALLBACK
                     send_callback(chunk);
                     log('DATA:' + content_data);
@@ -113,7 +113,7 @@ exports.do_rely = function (req, res, parsed_url) {
                             MyGlobal.inspection_str = util.inspect(socketException);
                             log('RETRY::SocketException:' + MyGlobal.inspection_str);
                         }
-                        DAO.update_retry_fail(id);
+                        dao.update_pending(id);
                     }
 
                     var try_relayed_req;
@@ -147,6 +147,8 @@ exports.do_rely = function (req, res, parsed_url) {
             return relayed_req;
         }
 
+    //function rely:handler
+
         var res_status,
             options,
             relayer_method = req.headers[MyGlobal.HEAD_RELAYER_METHOD] || 'GET',
@@ -157,11 +159,12 @@ exports.do_rely = function (req, res, parsed_url) {
         id = uuid.v1();
         res_status = MyGlobal.STATUS_OK;
         postdata = req.postdata ? req.postdata : '';
-        DAO.update_pending(id, relayer_host, req.method, postdata, function (err) {
+        dao.update_pending(id, relayer_host, req.method, postdata, function (err) {
             if (err) {
                 res_status = MyGlobal.STATUS_WEIRD; //something weird happens //
             }
         });
+
         //Quick answer to client
         res.writeHead(res_status);
         res.write(id);
@@ -192,7 +195,7 @@ exports.do_rely = function (req, res, parsed_url) {
             res.end();
         }
     }
-
+//function do_rely
     //Main OP DISPATCHING
     //Retrieve
     if (parsed_url.pathname == '/sendmail') {

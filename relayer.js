@@ -1,20 +1,17 @@
 //TODO PARSE URL FROM x-relayer-URL
-var http = require('http');
-var util = require('util');
-var url = require('url');
-var uuid = require('node-uuid');
-var cluster = require('cluster');
-var DAO = require('./relayerDAO');
-var logger = require('./simpleLogger').log;
-var mail = require('./mailAgent');
-var relayer = require('./relayerHandler');
-var MyGlobal = require('./constantModule').Global;
-var log = logger.log;
-var numCPUs = require('os').cpus().length;
-var dbhost;
-var dbport;
-var parsed_url;
-//CommonJs modules make this unnecessary
+var
+ http = require('http'),
+ url = require('url'),
+ cluster = require('cluster'),
+ logger = require('./simpleLogger').log,
+ relayer = require('./relayerHandler'),
+ MyGlobal = require('./constantModule').Global,
+ dao = require('./relayerDAO'),
+ log = logger.log,
+ numCPUs = require('os').cpus().length,
+ dbhost,
+ dbport,
+ parsed_url;
 
 function extract_params() {
     "use strict";
@@ -31,7 +28,6 @@ function extract_params() {
         }
     }
 }
-
 extract_params();
 if (MyGlobal.args[MyGlobal.PARAM_HELP]) {
     //print help and exit
@@ -54,8 +50,8 @@ else {
     if (MyGlobal.args[MyGlobal.PARAM_DBPORT]) {
         dbport = MyGlobal.args[MyGlobal.PARAM_DBPORT];
     }
-    DAO.ini(dbhost, dbport);
-    //Launching clusters
+    dao.ini(dbhost, dbport);
+//Launching clusters
     if (MyGlobal.args[MyGlobal.PARAM_SPAWN]) {
         if (cluster.isMaster) {
             // Fork workers.
@@ -86,11 +82,11 @@ else {
                         chunk += data ? data : '';
                         req.postdata = chunk; //extending req-object
                         log("POST DATA END FROM CLIENT");
-                        relayer.do_rely(req, res, parsed_url);
+                        relayer.do_rely(req, res, parsed_url, dao);
                     });
                 }
                 else {
-                    relayer.do_rely(req, res, parsed_url);
+                    relayer.do_rely(req, res, parsed_url, dao);
                 }
             }).listen(8000);
     }
