@@ -6,7 +6,7 @@
  * To change this template use File | Settings | File Templates.
  */
 
-//It's extrange, it's Singleton
+//Singleton
 exports.log = (function simpleLogger() {
     "use strict";
     var utils = require('util'),

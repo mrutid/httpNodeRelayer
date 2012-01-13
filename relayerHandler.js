@@ -81,6 +81,7 @@ exports.do_rely = function (req, res, parsed_url, dao) {
                         callback_req.on('error', function (err) {
                             MyGlobal.inspection_str = util.inspect(err);
                             log("EXCEPTION AT CALLBACK REQUEST:" + MyGlobal.inspection_str);
+                            //modify state
                         });
                         if (res_data) {
                             callback_req.write(res_data);
